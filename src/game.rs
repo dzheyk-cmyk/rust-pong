@@ -64,10 +64,10 @@ impl Plugin for InGamePlugin {
                 .with_system(check_for_collisions)                
                 .with_system(move_player.before(check_for_collisions))
                 .with_system(apply_velocity.before(check_for_collisions))                
-                .with_system(move_opponent.before(check_for_collisions))
-                .with_system(update_scoreboard)
+                .with_system(move_opponent.before(check_for_collisions))                
+                .with_system(update_score)
                 .with_system(esc_to_menu)
-                .with_system(pause_game)
+                .with_system(pause_game)                
         )
         .add_system_set(
             SystemSet::on_enter(GameState::MainMenu)
@@ -75,7 +75,7 @@ impl Plugin for InGamePlugin {
         )
         .add_system_set(
             SystemSet::on_update(GameState::Paused)
-            .with_system(pause_game)
+            .with_system(pause_game)            
         );
     }    
 }
@@ -103,6 +103,9 @@ struct CollisionEvent;
 
 #[derive(Component)]
 struct GameEntity;
+
+#[derive(Component)]
+struct Score;
 
 struct OuterBallLoc {
     top: f32,
@@ -315,6 +318,7 @@ fn game_setup(mut commands: Commands,
                 ..default()
             }),
         )
+        .insert(Score)
         .insert(GameEntity);
     
     // Spawn walls using implementation of WallBundle enum
@@ -336,6 +340,14 @@ fn get_score_str(scoreboard: Res<Scoreboard>) -> String {
     .to_string()    
 }
 
+fn update_score(
+    mut score_query: Query<&mut Text, With<Score>>,
+    scoreboard: Res<Scoreboard>
+) {
+    let mut score = score_query.single_mut();
+    score.sections[0].value = get_score_str(scoreboard);    
+}
+
 fn is_between(input: f32, val_1: f32, val_2: f32) -> bool {
     if input < val_1 && input > val_2 {
         return true
@@ -347,6 +359,7 @@ fn check_for_collisions(
     mut ball_query: Query<(&mut Velocity, &Transform), With<Ball>>,
     mut player_query: Query<&Transform, With<Player>>,
     mut opponent_query: Query<&Transform, With<Opponent>>,
+    mut scoreboard: ResMut<Scoreboard>
 ) {    
     let (mut ball_velocity, mut ball_transform) = ball_query.single_mut();
     let player_transform = player_query.single_mut();
@@ -385,11 +398,15 @@ fn check_for_collisions(
         ball_velocity.0.y *= -1.0;
     }
 
-    if ball_side.right > WallLocation::Right.inner().x || ball_side.left 
-        < WallLocation::Left.inner().x {
-        
+    if ball_side.right > WallLocation::Right.inner().x {        
+        scoreboard.opponent_score += 1;              
         ball_velocity.0.x *= -1.0;
     }      
+
+    else if  ball_side.left < WallLocation::Left.inner().x {        
+        scoreboard.player_score += 1;  
+        ball_velocity.0.x *= -1.0;
+    }
          
 }
 
@@ -431,10 +448,6 @@ fn move_opponent(
     else if ball_transform.translation.y < ypos {
         opponent_velocity.0.y = -1.0*OPPONENT_VELOCITY;
     }
-}
-
-fn update_scoreboard () {
-
 }
 
 fn esc_to_menu(
